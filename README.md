@@ -1,0 +1,1 @@
+# script_creating_bolt_model_drawing
