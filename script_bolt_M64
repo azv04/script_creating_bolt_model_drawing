@@ -1,0 +1,299 @@
+import cadquery as cq
+from math import tan, radians, cos, sin, sqrt, pi
+import time
+import ezdxf
+from ezdxf.math import ConstructionArc
+from ezdxf.math import Vec3
+
+# Размеры из чертежа
+HEAD_KEYS = 95          #размер ключа
+HEAD_DIAMETER = round(HEAD_KEYS*1.1547, 1)   # диаметр головки по вершинам
+HEAD_HEIGHT = 40        # высота головки болта
+SHAFT_DIAMETER = 64.0   # диаметр стержня
+THREAD_LENGTH = 102.0   # длина резьбовой части
+CHAMFER_LENGTH = 4      # фаска
+R_FILLET = 2            # радиус скругления
+HEAD_DIA = 95           # промежуточный диаметр
+HEAD_ANGLE = 30         # угол скоса головки болта
+BOLT_LENGTH = 120       # длина болта без головки
+THREAD_DEPTH = 3.25     # глубина резьбы
+CHAMFER_ANGLE = 45.0    # угол скоса фаски вершин
+THREAD_PITCH = 6        # Шаг резьбы, мм
+
+#таймкод для документа
+timestr = time.strftime('%Y%m%d-%H%M%S-')
+
+
+# Создание чертежа
+doc = ezdxf.new('R2010', setup=True, units=4)
+msp = doc.modelspace()
+
+#основной контур
+main_layer = doc.layers.add(name='Main', color=7, linetype='CONTINUOUS', lineweight=50) 
+
+point1_end = (0, HEAD_DIA/2)
+line1 = msp.add_line((0, 0), point1_end, dxfattribs={'layer': 'Main'})
+
+#фаска
+dx2 = HEAD_DIAMETER/2-HEAD_DIA/2
+point2_end =(tan(radians(HEAD_ANGLE))*dx2, HEAD_DIAMETER/2)
+line2 = msp.add_line(point1_end, point2_end, dxfattribs={'layer': 'Main'},)
+
+#для головки болта
+point_start_edge_head = (point2_end[0], HEAD_DIAMETER/2 * cos(radians(60)))
+point_end_edge_head = (HEAD_HEIGHT, point_start_edge_head[1])
+line_edge_head = msp.add_line(point_start_edge_head, point_end_edge_head, dxfattribs={'layer': 'Main'},)
+
+# Создаём дуги для головки болта
+start_point_arc = ((point2_end[0] + point1_end[0]) / 2, (point2_end[1] + point1_end[1]) / 2)
+
+radius = 27.81
+
+line_arc_up = ConstructionArc.from_2p_radius(start_point=start_point_arc,end_point=point_start_edge_head,radius=radius,ccw=True).add_to_layout(msp, dxfattribs={'layer': 'Main'},)
+
+radius2 = 90.76
+
+line_arc_center = ConstructionArc.from_3p(start_point=point_start_edge_head,end_point=(point_start_edge_head[0],-point_start_edge_head[1]), def_point=(0,0),ccw=True).add_to_layout(msp, dxfattribs={'layer': 'Main'},)
+
+#торец
+point3_end = (HEAD_HEIGHT, HEAD_DIAMETER/2)
+line3 = msp.add_line(point2_end, point3_end, dxfattribs={'layer': 'Main'},)
+line4 = msp.add_line(point3_end, (HEAD_HEIGHT, 0), dxfattribs={'layer': 'Main'},)
+
+#радиус
+line5 = msp.add_arc(center=(HEAD_HEIGHT+R_FILLET, SHAFT_DIAMETER/2+R_FILLET), radius=R_FILLET, start_angle=180, end_angle=270, dxfattribs={'layer': 'Main'},)
+
+#стержень по длине
+point6_end = (HEAD_HEIGHT+BOLT_LENGTH-CHAMFER_LENGTH, SHAFT_DIAMETER/2)
+line6 = msp.add_line((HEAD_HEIGHT+R_FILLET, SHAFT_DIAMETER/2),point6_end , dxfattribs={'layer': 'Main'},)
+
+#фаска2х45
+point7_start = (HEAD_HEIGHT+BOLT_LENGTH-CHAMFER_LENGTH, SHAFT_DIAMETER/2)
+point7_end = (HEAD_HEIGHT+BOLT_LENGTH, SHAFT_DIAMETER/2-CHAMFER_LENGTH)
+line7 = msp.add_line(point7_start, point7_end, dxfattribs={'layer': 'Main'},)
+
+#торец стержня
+line8 = msp.add_line(point7_end, (HEAD_HEIGHT+BOLT_LENGTH, 0), dxfattribs={'layer': 'Main'},)
+
+#линия для фаски
+line9 = msp.add_line(point7_start, (point7_start[0], 0), dxfattribs={'layer': 'Main'},)
+
+#вид сверху
+x_offset = BOLT_LENGTH+HEAD_HEIGHT*4
+
+vertices = []
+for i in range(6):
+    angle = i * 60+90  # углы между вершинами 60°+ поворот на 90 градусов
+    x = HEAD_DIAMETER/2 * cos(radians(angle))+x_offset
+    y = HEAD_DIAMETER/2 * sin(radians(angle)) 
+    vertices.append((x, y))
+
+# Добавляем шестиугольник 
+line10 = msp.add_lwpolyline(vertices, close=True)  # close=True закрывает полилинию
+
+# Добавляем внутреннюю окружность 
+line11 = msp.add_circle((x_offset, 0), HEAD_KEYS/2)
+
+#резьба
+thread_layer = doc.layers.add(name='Thread', color=4, linetype='CONTINUOUS', lineweight=25)
+point12_end = (BOLT_LENGTH+HEAD_HEIGHT-THREAD_LENGTH, SHAFT_DIAMETER/2-THREAD_DEPTH)
+line12 = msp.add_line((point12_end[0]+THREAD_LENGTH, point12_end[1]), point12_end, dxfattribs={'layer': 'Thread'},)
+
+#линия конца резьбы 
+line13 = msp.add_line((point12_end[0], point12_end[1]+THREAD_DEPTH), (point12_end[0], 0), dxfattribs={'layer': 'Main'},)
+
+#копирование
+line1_sym = line1.copy()
+msp.add_entity(line1_sym)
+line2_sym = line2.copy()
+msp.add_entity(line2_sym)
+line3_sym = line3.copy()
+msp.add_entity(line3_sym)
+line4_sym = line4.copy()
+msp.add_entity(line4_sym)
+line5_sym = line5.copy()
+msp.add_entity(line5_sym)
+line6_sym = line6.copy()
+msp.add_entity(line6_sym)
+line7_sym = line7.copy()
+msp.add_entity(line7_sym)
+line8_sym = line8.copy()
+msp.add_entity(line8_sym)
+line9_sym = line9.copy()
+msp.add_entity(line9_sym)
+line11_sym = line11.copy()
+msp.add_entity(line11_sym)
+line12_sym = line12.copy()
+msp.add_entity(line12_sym)
+line13_sym = line13.copy()
+msp.add_entity(line13_sym)
+line_edge_head_sym = line_edge_head.copy()
+msp.add_entity(line_edge_head_sym)
+line_arc_up_sym = line_arc_up.copy()
+msp.add_entity(line_arc_up_sym)
+
+#симметрия по оси Y
+line1_sym.scale(1, -1, 1)
+line2_sym.scale(1, -1, 1)
+line3_sym.scale(1, -1, 1)
+line4_sym.scale(1, -1, 1)
+line5_sym.scale(1, -1, 1)
+line6_sym.scale(1, -1, 1)
+line7_sym.scale(1, -1, 1)
+line8_sym.scale(1, -1, 1)
+line9_sym.scale(1, -1, 1)
+line11_sym.scale(1, -1, 1)
+line12_sym.scale(1, -1, 1)
+line13_sym.scale(1, -1, 1)
+line_edge_head_sym.scale(1, -1, 1)
+line_arc_up_sym.scale(1, -1, 1)
+
+#оси
+doc.layers.add(name='Axises', color=6, linetype='CENTER')
+msp.add_line((-5, 0), (HEAD_HEIGHT+BOLT_LENGTH+5, 0), dxfattribs={'layer': 'Axises'},)
+msp.add_line((-5+x_offset-HEAD_DIAMETER/2, 0), (x_offset+HEAD_DIAMETER/2+5, 0), dxfattribs={'layer': 'Axises'},)
+msp.add_line((x_offset, HEAD_DIAMETER/2+5), (x_offset, -HEAD_DIAMETER/2-5), dxfattribs={'layer': 'Axises'},)
+
+#размеры
+doc.layers.add(name='Measure', color=170, lineweight=25)
+point_base1 = point7_start
+zazor = 7.5
+point_base2 = (0, -THREAD_LENGTH/2-zazor)
+point_base3 = (BOLT_LENGTH+HEAD_HEIGHT+zazor, 0)
+
+#фаска
+CHAMFER_dim = msp.add_linear_dim(base=(point_base1[0], point_base1[1]+zazor), p1=point7_start, p2=point7_end, dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, text=str(CHAMFER_LENGTH)+'x'+str(CHAMFER_ANGLE)+'%%d', dxfattribs= {'layer': 'Measure'},)
+CHAMFER_dim.render()
+
+#резьба
+THREAD_dim = msp.add_linear_dim(base=point_base2, p1=(point12_end[0],-(point12_end[1]+THREAD_DEPTH)), p2=(point7_end[0], -point7_end[1]), dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, dxfattribs= {'layer': 'Measure'},)
+THREAD_dim.render()
+
+#головка болта
+HEAD_dim = msp.add_linear_dim(base=point_base2, p1=(point1_end[0], -point1_end[1]), p2=(HEAD_HEIGHT, -HEAD_DIAMETER/2), dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, dxfattribs= {'layer': 'Measure'},)
+HEAD_dim.render()
+
+#длина болта
+BOLT_dim = msp.add_linear_dim(base=(0, point_base2[1]-zazor), p1=(point1_end[0], -point1_end[1]), p2=(point7_end[0], -point7_end[1]), dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, dxfattribs= {'layer': 'Measure'},)
+BOLT_dim.render()
+
+#угол фаски головки болта
+point_vertic_end = (0, HEAD_DIAMETER/ 2)
+line_vertic = msp.add_line(point1_end, point_vertic_end, dxfattribs={'layer': 'Measure'})
+
+CHAMFER_LEFT_DEG_dim = msp.add_angular_dim_2l(base=(point_vertic_end[0], point_vertic_end[1]+zazor), line1=(point1_end, point_vertic_end), line2=(point1_end, point2_end), dimstyle='STANDARD', override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, dxfattribs={'layer': 'Measure'})
+CHAMFER_LEFT_DEG_dim.render()
+
+#резьба
+SHAFT_dim = msp.add_aligned_dim(p1=point7_start, p2=(point7_start[0], -point7_start[1]), distance=CHAMFER_LENGTH+zazor*2, dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, text='М'+str(round(SHAFT_DIAMETER,0)), dxfattribs= {'layer': 'Measure'},)
+SHAFT_dim.render()
+
+#размер головки болта на виде справа
+point1_x = HEAD_DIAMETER/2 * cos(radians(4*60+90))+x_offset
+point1_y = HEAD_DIAMETER/2 * sin(radians(4*60+90))
+point2_x = HEAD_DIAMETER/2 * cos(radians(2*60+90))+x_offset
+point2_y = HEAD_DIAMETER/2 * sin(radians(2*60+90))
+
+HEADR_dim = msp.add_linear_dim(base=(point_base2[0],point_base2[1]-zazor), p1=(point1_x, point1_y), p2=(point2_x, point2_y), dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, dxfattribs= {'layer': 'Measure'},)
+HEADR_dim.render()
+
+#размер окружности на виде справа
+point3_x = HEAD_DIAMETER/2 * cos(radians(6*60+90))+x_offset
+point3_y = HEAD_DIAMETER/2 * sin(radians(6*60+90))
+point4_x = HEAD_DIAMETER/2 * cos(radians(3*60+90))+x_offset
+point4_y = HEAD_DIAMETER/2 * sin(radians(3*60+90))
+
+HEADROUT_dim = msp.add_aligned_dim(p1=(point3_x, point3_y), p2=(point4_x, point4_y), distance=HEAD_DIAMETER/2+zazor*2,  dimstyle='STANDARD',override={'dimlfac': 1, 'dimtxt': 2.5, 'dimtad': 0, 'dimtvp': 0, 'dimdle': 0, 'dimblk': 'EZ_ARROW_FILLED'}, dxfattribs= {'layer': 'Measure'},)
+HEADROUT_dim.render()
+
+#размер внутреннего диаметра
+dim_HEADIN = msp.add_diameter_dim(center=(x_offset, 0) ,radius=HEAD_KEYS/2, dimstyle="STANDARD", angle = -60, override={'dimlfac': 1, 'dimtxt': 2.5, 'dimblk': 'EZ_ARROW_FILLED', 'dimtmove': 1, 'dimtoh': 1, 'dimtad': 1, 'dimarcsym': 1}, dxfattribs= {'layer': 'Measure',}, )
+dim_HEADIN.render()
+
+#размер радиуса
+point_centr_R = (HEAD_HEIGHT+R_FILLET, SHAFT_DIAMETER/2+R_FILLET)
+dim_Rfillet = msp.add_radius_dim(center=point_centr_R, radius=R_FILLET, angle = CHAMFER_ANGLE, dimstyle="STANDARD", override={'dimlfac': 1, 'dimtxt': 2.5, 'dimblk': 'EZ_ARROW_FILLED', 'dimtmove': 1, 'dimtoh': 1, 'dimtad': 1, 'dimarcsym': 0}, dxfattribs= {'layer': 'Measure'},)
+dim_Rfillet.render()
+
+#сохранение чертежа
+filename = f"{timestr}bolt_M64.dxf"
+doc.saveas(filename)
+print(f"Чертеж сохранён как: {filename}")
+
+
+#МОДЕЛИРОВАНИЕ
+
+
+
+#Hасчётные константы
+R = HEAD_DIAMETER / 2
+r = R * sqrt(3) / 2  # Радиус вписанной окружности
+chamfer_size = (R - r) / tan(radians(CHAMFER_ANGLE)) #Величина скоса кромок
+
+#параметры секущего конуса
+BASE_RADIUS = (HEAD_DIAMETER / 2) * 1.2  # Внешний радиус основания конуса
+TOP_RADIUS = 50.0                            # Внешний радиус вершины конуса
+HEIGHT = (BASE_RADIUS - TOP_RADIUS) / tan(radians(CHAMFER_ANGLE))  # Высота конуса
+WALL_THICKNESS = BASE_RADIUS - (HEAD_DIAMETER / 2)  # Толщина стенок конуса
+H_TARGET = HEAD_HEIGHT * ((BASE_RADIUS - WALL_THICKNESS - r) /(BASE_RADIUS - WALL_THICKNESS - (TOP_RADIUS - WALL_THICKNESS)))  # Подача по оси Z
+
+#создаём шестигранную головку
+head = cq.Workplane("XY").polygon(6, HEAD_DIAMETER).extrude(HEAD_HEIGHT)
+
+#создаём внешний конус
+outer = cq.Solid.makeCone(BASE_RADIUS, TOP_RADIUS, HEIGHT,
+    (0, 0, HEAD_HEIGHT))
+
+#создаём внутренний конус (для полой структуры)
+inner = cq.Solid.makeCone(BASE_RADIUS - WALL_THICKNESS,TOP_RADIUS - WALL_THICKNESS,HEIGHT,
+    (0, 0, HEAD_HEIGHT))
+
+#вычитаем внутренний конус из внешнего — получаем полый конус
+hollow_cone = outer.cut(inner)
+
+#перемещаем конус
+hollow_cone_moved = hollow_cone.translate((0, 0, -H_TARGET/2))
+
+#перемещаем головку и вырезаем конус
+head_with_chamfer = head.cut(hollow_cone_moved)
+
+#создаём стержень болта
+shaft = cq.Workplane('back').circle(SHAFT_DIAMETER / 2).extrude(BOLT_LENGTH)
+
+#добавляем фаску на конце стержня
+shaft = shaft.faces("<Z").chamfer(CHAMFER_LENGTH)
+
+#объединяем головку с фаской и стержень
+bolt = head_with_chamfer.union(shaft)
+
+sketch = (cq.Workplane("YZ")
+          .lineTo(-R_FILLET, 0)           # Линия вправо
+          .radiusArc((0, -R_FILLET), radius=R_FILLET)  # Дуга вверх и влево
+          .lineTo(0, 0)           # Линия вниз к началу
+          .close())
+
+fillet = (sketch
+          .revolve(
+              angleDegrees=360,
+              axisStart=(SHAFT_DIAMETER/2, 0, 0),  # Начало оси Z (можно сдвинуть, если нужно)
+              axisEnd=(SHAFT_DIAMETER/2, 1, 0)     # Направление оси Z (вверх)
+          )).translate((0, -SHAFT_DIAMETER/2, 0))
+
+bolt_finish = bolt.union(fillet)
+
+#добавление резьбы упрощенно
+if THREAD_LENGTH > 0:
+    num_threads = int(THREAD_LENGTH / THREAD_PITCH)
+    
+    for i in range(num_threads):
+        angle = i * 360 * THREAD_PITCH / THREAD_LENGTH
+        z_offset = -i * THREAD_PITCH
+        x = (SHAFT_DIAMETER / 2 - THREAD_DEPTH) * cos(radians(angle))
+        y = (SHAFT_DIAMETER / 2 - THREAD_DEPTH) * sin(radians(angle))
+        
+        bolt_finish = bolt_finish.faces("<Z")  .workplane(offset=z_offset)  .transformed(rotate=(0, 0, angle)).circle(THREAD_DEPTH / 2).cutBlind(-THREAD_DEPTH) 
+
+#сохранение модели
+filename = f"{timestr}bolt_M64.step"
+cq.exporters.export(bolt_finish, "bolt_М64.step")
+print(f"Модель сохранена как: {filename}")
